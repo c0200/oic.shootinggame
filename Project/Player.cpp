@@ -41,7 +41,6 @@ void CPlayer::Initialize(void){
 void CPlayer::Update(void){
 
 	float Roll = 0;
-
 	if (g_pInput->IsKeyHold(MOFKEY_LEFT))
 	{
 		m_Pos.x = max(m_Pos.x - PLAYER_SPEED, -FIELD_HALF_X);
