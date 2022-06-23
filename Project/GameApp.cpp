@@ -12,6 +12,7 @@
 #include	"Player.h"
 #include	"Stage.h"
 #include	"Stage1.h"
+#include	"Boss.h"
 
 CCamera				gCamera;
 
@@ -26,7 +27,14 @@ CEnemy				gEnemyArray[ENEMY_COUNT];
 CEnemyShot			gShotArray[ENEMYSHOT_COUNT];
 CMeshContainer		gEnemyShotMesh;
 
+CBoss				gBoss;
+
 CStage				gStage;
+
+// 雑魚全滅フラグ
+bool				gbEnemyDestroyed = false;
+// ステージクリアフラグ
+bool				gbClear = false;
 //デバッグ表示フラグ
 bool				gbDebug = false;
 
@@ -62,6 +70,7 @@ MofBool CGameApp::Initialize(void){
 	{
 		return false;
 	}
+	gBoss.Load();
 
 	//プレイヤーの状態初期化
 	gPlayer.Initialize();
@@ -79,6 +88,8 @@ MofBool CGameApp::Initialize(void){
 		gShotArray[i].SetMesh(&gEnemyShotMesh);
 	}
 
+	gBoss.Initialize();
+
 	return TRUE;
 }
 /*************************************************************************//*!
@@ -88,19 +99,23 @@ MofBool CGameApp::Initialize(void){
 		@return			TRUE		成功<br>
 						それ以外	失敗、エラーコードが戻り値となる
 *//**************************************************************************/
-MofBool CGameApp::Update(void){
+MofBool CGameApp::Update(void) {
 	//キーの更新
 	g_pInput->RefreshKey();
 
-	gStage.Update(gEnemyArray,ENEMY_COUNT);
+	gStage.Update(gEnemyArray, ENEMY_COUNT);
 
 	gPlayer.Update();
 
 	for (int i = 0; i < ENEMY_COUNT; i++)
 	{
 		gEnemyArray[i].SetTargetPos(gPlayer.GetPosition());
-		gEnemyArray[i].Update(gShotArray,ENEMYSHOT_COUNT);
+		gEnemyArray[i].Update(gShotArray, ENEMYSHOT_COUNT);
 	}
+	// ボスの更新
+	gBoss.SetTargetPos(gPlayer.GetPosition());
+	gBoss.Update(gShotArray, ENEMYSHOT_COUNT);
+	// 敵弾の更新
 
 	for (int i = 0; i < ENEMYSHOT_COUNT; i++)
 	{
@@ -112,109 +127,165 @@ MofBool CGameApp::Update(void){
 	{
 		gPlayer.CollisionEnemy(gEnemyArray[i]);
 	}
-
+	// ボスとの当たり判定
+	gPlayer.CollisionBoss(gBoss);
 	for (int i = 0; i < ENEMYSHOT_COUNT; i++)
 	{
 		gPlayer.CollisionEnemyShot(gShotArray[i]);
+	}
+
+	// 雑魚全滅判定
+	if (!gbEnemyDestroyed && gStage.IsAllEnemy())
+	{
+		bool btmp = true;
+		for (int i = 0; i < ENEMY_COUNT; i++)
+		{
+			if (gEnemyArray[i].GetShow())
+			{
+				btmp = false;
+			}
+		}
+		gbEnemyDestroyed = btmp;
+		// 全滅していればボス出現
+		if (gbEnemyDestroyed)
+		{
+			gBoss.Start();
+			gBoss.SetTargetPos(gPlayer.GetPosition());
+			gBoss.Update(gShotArray, ENEMYSHOT_COUNT);
+		}
+	}
+	// ゲームクリア判定
+	if (!gbClear && gbEnemyDestroyed && !gBoss.GetShow())
+	{
+		gbClear = true;
 	}
 
 	if (g_pInput->IsKeyPush(MOFKEY_F1))
 	{
 		gbDebug = ((gbDebug) ? false : true);
 	}
-
-	if (g_pInput->IsKeyPush(MOFKEY_RETURN) && gPlayer.IsDead())
+	// ゲームオーバー、ゲームクリアー表示後に Enter で初期化を行う
+	if (g_pInput->IsKeyPush(MOFKEY_RETURN) && (gPlayer.IsDead() || gbClear))
 	{
-		gPlayer.Initialize();
-		gStage.Initialize(&gStg1EnemyStart);
-		for (int i = 0; i < ENEMY_COUNT; i++)
+		// クリアフラグを戻す
+		gbEnemyDestroyed = false;
+		gbClear = false;
+		if (g_pInput->IsKeyPush(MOFKEY_RETURN) && gPlayer.IsDead())
 		{
-			gEnemyArray[i].Initialize();
+			gPlayer.Initialize();
+			gStage.Initialize(&gStg1EnemyStart);
+			for (int i = 0; i < ENEMY_COUNT; i++)
+			{
+				gEnemyArray[i].Initialize();
+			}
+			for (int i = 0; i < ENEMYSHOT_COUNT; i++)
+			{
+				gShotArray[i].Initialize();
+			}
+			gBoss.Initialize();
 		}
-		for (int i = 0; i < ENEMYSHOT_COUNT; i++)
-		{
-			gShotArray[i].Initialize();
-		}
-	}
 
-	float posX = gPlayer.GetPosition().x * 0.4f;
-	CVector3 cpos = gCamera.GetViewPosition();
-	CVector3 tpos = gCamera.GetTargetPosition();
-	CVector3 vup = CVector3(0, 1, 0);
-	cpos.x = posX;
-	tpos.x = posX;
-	vup.RotationZ(gPlayer.GetPosition().x / FIELD_HALF_X * MOF_ToRadian(10.0f));
-	gCamera.LookAt(cpos, tpos, vup);
-	gCamera.Update();
-	return TRUE;
+		float posX = gPlayer.GetPosition().x * 0.4f;
+		CVector3 cpos = gCamera.GetViewPosition();
+		CVector3 tpos = gCamera.GetTargetPosition();
+		CVector3 vup = CVector3(0, 1, 0);
+		cpos.x = posX;
+		tpos.x = posX;
+		vup.RotationZ(gPlayer.GetPosition().x / FIELD_HALF_X * MOF_ToRadian(10.0f));
+		gCamera.LookAt(cpos, tpos, vup);
+		gCamera.Update();
+		return TRUE;
+	}
 }
 
-/*************************************************************************//*!
-		@brief			アプリケーションの描画
-		@param			None
-				
-		@return			TRUE		成功<br>
-						それ以外	失敗、エラーコードが戻り値となる
-*//**************************************************************************/
-MofBool CGameApp::Render(void){
-	//描画処理
-	g_pGraphics->RenderStart();
-	// 画面のクリア
-	g_pGraphics->ClearTarget(0.65f,0.65f,0.67f,0.0f,1.0f,0);
+	/*************************************************************************//*!
+			@brief			アプリケーションの描画
+			@param			None
 
-	g_pGraphics->SetDepthEnable(TRUE);
+			@return			TRUE		成功<br>
+							それ以外	失敗、エラーコードが戻り値となる
+	*//**************************************************************************/
+	MofBool CGameApp::Render(void) {
+		//描画処理
+		g_pGraphics->RenderStart();
+		// 画面のクリア
+		g_pGraphics->ClearTarget(0.65f, 0.65f, 0.67f, 0.0f, 1.0f, 0);
 
-	gStage.Render();
+		// 深度バッファ有効化
+		g_pGraphics->SetDepthEnable(TRUE);
 
-	gPlayer.Render();
-
-	for (int i = 0; i < ENEMY_COUNT; i++)
-	{
-		gEnemyArray[i].Render();
-	}
-
-	for (int i = 0; i < ENEMYSHOT_COUNT; i++)
-	{
-		gShotArray[i].Render();
-	}
-
-	if (gbDebug)
-	{
-		gPlayer.RenderDebug();
+		// ステージ描画
+		gStage.Render();
+		// プレイヤー描画
+		gPlayer.Render();
+		// 敵の描画
 		for (int i = 0; i < ENEMY_COUNT; i++)
 		{
-			gEnemyArray[i].RenderDebug();
+			gEnemyArray[i].Render();
 		}
+		// ボスの描画
+		gBoss.Render();
+		// 敵弾の描画
 		for (int i = 0; i < ENEMYSHOT_COUNT; i++)
 		{
-			gShotArray[i].RenderDebug();
+			gShotArray[i].Render();
 		}
-		CMatrix44 matWorld;
-		matWorld.Scaling(FIELD_HALF_X * 2, 1, FIELD_HALF_Z * 2);
-		CGraphicsUtilities::RenderPlane(matWorld, Vector4(1, 1, 1, 0.4f));
-	}
 
-	g_pGraphics->SetDepthEnable(FALSE);
-
-	if (gbDebug)
-	{
-		gStage.RenderDebugText();
-		gPlayer.RenderDebugText();
-		for(int i = 0; i < ENEMY_COUNT; i++)
+		// 3Dデバッグ描画
+		if (gbDebug)
 		{
-			gEnemyArray[i].RenderDebugText(i);
+			// プレイヤーのデバッグ描画
+			gPlayer.RenderDebug();
+			// 敵のデバッグ描画
+			for (int i = 0; i < ENEMY_COUNT; i++)
+			{
+				gEnemyArray[i].RenderDebug();
+			}
+			// ボスのデバッグ描画
+			gBoss.RenderDebug();
+			// 敵弾のデバッグ描画
+			for (int i = 0; i < ENEMYSHOT_COUNT; i++)
+			{
+				gShotArray[i].RenderDebug();
+			}
+			// 移動可能範囲の表示
+			CMatrix44 matWorld;
+			matWorld.Scaling(FIELD_HALF_X * 2, 1, FIELD_HALF_Z * 2);
+			CGraphicsUtilities::RenderPlane(matWorld, Vector4(1, 1, 1, 0.4f));
 		}
-	}
 
-	if (gPlayer.IsDead())
-	{
-		CGraphicsUtilities::RenderString(240, 350, MOF_COLOR_RED, "ゲームオーバー　：　Enterキーでもう一度最初から");
-	}
+		// 深度バッファ無効化
+		g_pGraphics->SetDepthEnable(FALSE);
 
-	// 描画の終了
-	g_pGraphics->RenderEnd();
-	return TRUE;
-}
+		// 2Dデバッグ描画
+		if (gbDebug)
+		{
+			// ステージのデバッグ文字描画
+			gStage.RenderDebugText();
+			// プレイヤーのデバッグ文字描画
+			gPlayer.RenderDebugText();
+			// 敵のデバッグ文字描画
+			for (int i = 0; i < ENEMY_COUNT; i++)
+			{
+				gEnemyArray[i].RenderDebugText(i);
+			}
+		}
+
+		// ゲームオーバー表示
+		if (gPlayer.IsDead())
+		{
+			CGraphicsUtilities::RenderString(240, 350, MOF_COLOR_RED, "ゲームオーバー　：　Enterキーでもう一度最初から");
+		}
+		// ゲームクリア表示
+		else if (gbClear)
+		{
+			CGraphicsUtilities::RenderString(240, 350, MOF_COLOR_RED, "ゲームクリア　：　Enterキーでもう一度最初から");
+		}
+
+		// 描画の終了
+		g_pGraphics->RenderEnd();
+		return TRUE;
+	}
 /*************************************************************************//*!
 		@brief			アプリケーションの解放
 		@param			None
@@ -226,5 +297,6 @@ MofBool CGameApp::Release(void){
 	gPlayer.Release();
 	gStage.Release();
 	gEnemyShotMesh.Release();
+	gBoss.Release();
 	return TRUE;
 }
