@@ -167,23 +167,23 @@ MofBool CGameApp::Update(void) {
 	// ゲームオーバー、ゲームクリアー表示後に Enter で初期化を行う
 	if (g_pInput->IsKeyPush(MOFKEY_RETURN) && (gPlayer.IsDead() || gbClear))
 	{
-		// クリアフラグを戻す
 		gbEnemyDestroyed = false;
 		gbClear = false;
-		if (g_pInput->IsKeyPush(MOFKEY_RETURN) && gPlayer.IsDead())
+		gPlayer.Initialize();
+		gStage.Initialize(&gStg1EnemyStart);
+		// クリアフラグを戻す
+
+
+		for (int i = 0; i < ENEMY_COUNT; i++)
 		{
-			gPlayer.Initialize();
-			gStage.Initialize(&gStg1EnemyStart);
-			for (int i = 0; i < ENEMY_COUNT; i++)
-			{
-				gEnemyArray[i].Initialize();
-			}
-			for (int i = 0; i < ENEMYSHOT_COUNT; i++)
-			{
-				gShotArray[i].Initialize();
-			}
-			gBoss.Initialize();
+			gEnemyArray[i].Initialize();
 		}
+		for (int i = 0; i < ENEMYSHOT_COUNT; i++)
+		{
+			gShotArray[i].Initialize();
+		}
+		gBoss.Initialize();
+	}
 
 		float posX = gPlayer.GetPosition().x * 0.4f;
 		CVector3 cpos = gCamera.GetViewPosition();
@@ -195,7 +195,7 @@ MofBool CGameApp::Update(void) {
 		gCamera.LookAt(cpos, tpos, vup);
 		gCamera.Update();
 		return TRUE;
-	}
+	
 }
 
 	/*************************************************************************//*!
